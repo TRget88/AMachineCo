@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a-truck tire and wheel</title>
+<!--
+  SPDX-License-Identifier: CERN-OHL-W-2.0
+  Mockup for docs/studies/tire-wheel.md. Made from docs/studies/_template.html.
+  Follow .agents/skills/truck-mockups/SKILL.md.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.94);
+    --text: #1d2330;
+    --muted: #5b6475;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d3d8e0;
+    --ok: #15803d;
+    --bad: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: rgba(27, 32, 41, 0.94);
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --border: #2c3340;
+      --ok: #4ade80;
+      --bad: #f87171;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: auto; box-sizing: border-box;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; margin: 10px 0 4px; }
+  .muted { color: var(--muted); margin: 0 0 10px; }
+  #options, #actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  button { font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text); }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  #option-note { margin: 4px 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  summary { cursor: pointer; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: var(--swatch); vertical-align: -1px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view" aria-label="3D view of the tire and wheel options"></div>
+<div id="panel">
+  <h1>Tire and wheel</h1>
+  <p class="muted">Write-up in docs/studies/tire-wheel.md, calculation in docs/calcs/tire-load.md.
+  Bars over each tire show its static load at gross mass, worst powertrain layout.</p>
+  <div id="options" role="group" aria-label="Tire options"></div>
+  <p id="option-note"></p>
+  <h2>Worst tire load at gross mass</h2>
+  <table id="loads"></table>
+  <h2>Repair</h2>
+  <div id="actions">
+    <button type="button" id="pull" aria-pressed="false">Take off the RH front wheel</button>
+  </div>
+  <p class="muted" id="pull-note">Shows the wheel sliding off its six studs along the axle line.</p>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Vehicle parameters (mm)</summary>
+    <table id="params"></table>
+  </details>
+  <p class="muted" style="margin-top:10px">Drag to orbit, right drag to pan, scroll to zoom.
+  Vehicle axes, X rearward, Y right, Z up.</p>
+</div>
+
+<!-- Copied from spec/vehicle-parameters.csv. tools/check.py warns when these drift from it. -->
+<script type="application/json" id="vehicle-parameters">
+{
+  "wheelbase": 3100,
+  "track_front": 1700,
+  "track_rear": 1700,
+  "tire_static_radius": 358.14,
+  "tire_overall_diameter": 802.64,
+  "tire_overall_width": 281.94,
+  "wheel_rim_diameter": 431.8,
+  "wheel_rim_width": 203.2,
+  "wheel_bolt_circle": 139.7,
+  "wheel_bolt_count": 6,
+  "rail_height": 152.4,
+  "rail_width": 76.2,
+  "rail_y": 450,
+  "rail_z": 400,
+  "rail_front_x": -750
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const P = JSON.parse(document.getElementById("vehicle-parameters").textContent);
+
+// Vehicle axes (X rearward, Y right, Z up, in mm) to three.js axes (Y up).
+const v = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// Colors for each kind of thing. Keep them the same in every mockup.
+const COLORS = {
+  frame: 0x4b6584,
+  powertrain: 0xe67e22,
+  suspension: 0x16a085,
+  body: 0x95a5a6,
+  wheel: 0x2d3436,
+  envelope: 0x8e44ad,
+};
+const material = (key, opacity = 1) => new THREE.MeshStandardMaterial({
+  color: COLORS[key], roughness: 0.7, metalness: key === "frame" ? 0.4 : 0.1,
+  transparent: opacity < 1, opacity,
+});
+const plain = (color, opacity = 1) => new THREE.MeshStandardMaterial({
+  color, roughness: 0.6, metalness: 0.2, transparent: opacity < 1, opacity,
+});
+
+// A box between two opposite corners, given in vehicle coordinates.
+function box(from, to, key, opacity) {
+  const a = v(...from), b = v(...to);
+  const size = new THREE.Vector3(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z),
+    typeof key === "string" ? material(key, opacity) : key);
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  return mesh;
+}
+
+// A cylinder along vehicle Y, centered at vehicle (x, y, z).
+function cylY(x, y, z, radius, width, mat, inner = 0) {
+  let geometry;
+  if (inner > 0) {
+    // A ring, drawn as a lathe of its cross section.
+    const pts = [
+      new THREE.Vector2(inner, -width / 2), new THREE.Vector2(radius, -width / 2),
+      new THREE.Vector2(radius, width / 2), new THREE.Vector2(inner, width / 2),
+      new THREE.Vector2(inner, -width / 2),
+    ];
+    geometry = new THREE.LatheGeometry(pts, 64);
+  } else {
+    geometry = new THREE.CylinderGeometry(radius, radius, width, 64);
+  }
+  const mesh = new THREE.Mesh(geometry, mat);
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// One tire and wheel. Its center sits at the static loaded radius, so the
+// tire's free shape dips into the ground by the deflection, as a real one does.
+function corner(x, y, tire) {
+  const g = new THREE.Group();
+  const side = Math.sign(y);
+  const z = P.tire_static_radius;
+  g.add(cylY(x, y, z, tire.diameter / 2, tire.width, material("wheel"), P.wheel_rim_diameter / 2));
+  // Steel wheel, drawn as the rim barrel and the disc with its bolt holes.
+  const steel = plain(0x9ca3af);
+  g.add(cylY(x, y, z, P.wheel_rim_diameter / 2, P.wheel_rim_width, steel, P.wheel_rim_diameter / 2 - 6));
+  g.add(cylY(x, y + side * 20, z, P.wheel_rim_diameter / 2 - 6, 8, steel));
+  const studMat = plain(0xd4a017);
+  for (let i = 0; i < P.wheel_bolt_count; i++) {
+    const a = (i / P.wheel_bolt_count) * Math.PI * 2;
+    const dx = Math.cos(a) * P.wheel_bolt_circle / 2, dz = Math.sin(a) * P.wheel_bolt_circle / 2;
+    g.add(cylY(x + dx, y + side * 30, z + dz, 9, 30, studMat));
+  }
+  return g;
+}
+
+// Static tire loads from docs/calcs/tire-load.md (710 kg powertrain_mass_max,
+// worst layout for each axle). Front 749 kg, rear 1,012 kg on the heavier side.
+const LOADS = { front: 749, rear: 1012 };
+
+const OPTIONS = [
+  {
+    name: "A. P265/70R17 113",
+    note: "The passenger version of the size, common on half ton trucks. Rated 1,150 kg, or 1,045 kg on a truck after the FMVSS 120 divisor of 1.10. Only 3 % reserve on the worst rear tire. Not recommended.",
+    capacity: 1150 / 1.1,
+    // Drawn at B's diameter and the nominal 265 mm section width of the size.
+    // Real dimensions vary by maker and model.
+    tire: { diameter: P.tire_overall_diameter, width: 265 },
+  },
+  {
+    name: "B. LT265/70R17 E",
+    note: "Recommended. Bridgestone Duravis R500 HD LT265/70R17 E 121/118R, rated 1,450 kg single. 43 % reserve on the worst rear tire. On the Carlstar Unique Soft-8 17 x 8 in steel wheel, six studs on 139.7 mm, a pattern several makers' half ton trucks use. The wheel is rated 1,361 kg, still 35 % over the worst tire load.",
+    capacity: 1450,
+    tire: { diameter: P.tire_overall_diameter, width: P.tire_overall_width },
+  },
+];
+
+// Scene, camera and controls. Units are millimeters.
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(v(-3000, -4000, 6000));
+scene.add(sun);
+const grid = new THREE.GridHelper(12000, 24, 0x8894a6, 0xb8c0cc);
+grid.position.copy(v(P.wheelbase / 2, 0, 0));
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 100000);
+camera.position.copy(v(-2600, 3600, 1800));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(v(P.wheelbase / 4, P.track_front / 4, 400));
+controls.addEventListener("change", render);
+
+// What both options share, the frame rails as proposed.
+const RAIL_REAR_X = P.wheelbase + 1300; // Assumed for this mockup only, as in the template.
+const common = new THREE.Group();
+for (const side of [1, -1]) {
+  const y = side * P.rail_y;
+  common.add(box(
+    [P.rail_front_x, y - P.rail_width / 2, P.rail_z - P.rail_height / 2],
+    [RAIL_REAR_X, y + P.rail_width / 2, P.rail_z + P.rail_height / 2], "frame"));
+}
+scene.add(common);
+let optionGroup = new THREE.Group();
+scene.add(optionGroup);
+let pulled = false;
+let rhFront = null;
+
+function render() { renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  render();
+}
+
+// A load bar over a tire. Its height is the load, its color the reserve.
+function loadBar(group, x, y, load, capacity) {
+  const ok = capacity >= load * 1.15;
+  const h = load * 0.4; // 0.4 mm of bar per kg.
+  const top = P.tire_overall_diameter + 80;
+  group.add(box([x - 40, y - 40, top], [x + 40, y + 40, top + h],
+    plain(ok ? 0x16a34a : 0xdc2626, 0.85)));
+  // A thin outline at the rated load, to compare with.
+  group.add(box([x - 60, y - 60, top + capacity * 0.4 - 4], [x + 60, y + 60, top + capacity * 0.4 + 4],
+    plain(0x1f2937, 0.9)));
+}
+
+const buttons = document.getElementById("options");
+function choose(index) {
+  const option = OPTIONS[index];
+  scene.remove(optionGroup);
+  optionGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  optionGroup = new THREE.Group();
+  for (const [x, track, axle] of [[0, P.track_front, "front"], [P.wheelbase, P.track_rear, "rear"]]) {
+    for (const side of [1, -1]) {
+      const c = corner(x, side * track / 2, option.tire);
+      if (axle === "front" && side === 1) {
+        rhFront = c;
+        c.position.copy(v(0, pulled ? 320 : 0, 0));
+      }
+      optionGroup.add(c);
+      loadBar(optionGroup, x, side * track / 2, LOADS[axle], option.capacity);
+    }
+  }
+  scene.add(optionGroup);
+  [...buttons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === index)));
+  document.getElementById("option-note").textContent = option.note;
+  document.getElementById("loads").replaceChildren(...[
+    ["Rated load on a truck", `${Math.round(option.capacity)} kg`],
+    ["Worst front tire", `${LOADS.front} kg`],
+    ["Worst rear tire", `${LOADS.rear} kg`],
+    ["Reserve on the worst tire", `${Math.round((option.capacity / LOADS.rear - 1) * 100)} %`],
+  ].map(([k, val], i) => {
+    const tr = document.createElement("tr");
+    const cls = i === 3 ? (option.capacity >= LOADS.rear * 1.15 ? "ok" : "bad") : "";
+    tr.innerHTML = `<td>${k}</td><td class="${cls}">${val}</td>`;
+    return tr;
+  }));
+  render();
+}
+OPTIONS.forEach((option, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = option.name;
+  b.addEventListener("click", () => choose(i));
+  buttons.appendChild(b);
+});
+
+const pull = document.getElementById("pull");
+pull.addEventListener("click", () => {
+  pulled = !pulled;
+  pull.setAttribute("aria-pressed", String(pulled));
+  if (rhFront) rhFront.position.copy(v(0, pulled ? 320 : 0, 0));
+  document.getElementById("pull-note").textContent = pulled
+    ? "Off. Jack under the frame rail, crack the six lug nuts first, lift, then spin them off with a lug wrench. Nothing else comes off. The tire is changed at any tire shop on its standard machine."
+    : "Shows the wheel sliding off its six studs along the axle line.";
+  render();
+});
+
+document.getElementById("legend").replaceChildren(...[
+  ["frame", COLORS.frame], ["tire", COLORS.wheel], ["steel wheel", 0x9ca3af], ["wheel studs", 0xd4a017],
+  ["load, 15 % reserve met", 0x16a34a], ["load, reserve not met", 0xdc2626], ["rated load", 0x1f2937],
+].map(([name, color]) => {
+  const s = document.createElement("span");
+  s.textContent = name;
+  s.style.setProperty("--swatch", "#" + color.toString(16).padStart(6, "0"));
+  return s;
+}));
+document.getElementById("params").replaceChildren(...Object.entries(P).map(([k, val]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${k}</td><td>${val}</td>`;
+  return tr;
+}));
+
+window.addEventListener("resize", resize);
+controls.update();
+choose(1);
+resize();
+</script>
+</body>
+</html>

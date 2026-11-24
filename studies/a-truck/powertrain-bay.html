@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a-truck powertrain bay survey</title>
+<!--
+  SPDX-License-Identifier: CERN-OHL-W-2.0
+  Mockup for docs/studies/powertrain-bay.md. Started from docs/studies/_template.html.
+  Every size and mass below is copied from the write-up, which gives its source.
+  The boxes are envelopes for comparing space, not models of the real parts.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.94);
+    --text: #1d2330;
+    --muted: #5b6475;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d3d8e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: rgba(27, 32, 41, 0.94);
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --border: #2c3340;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: auto; box-sizing: border-box;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; margin: 10px 0 2px; color: var(--muted); font-weight: 600; }
+  .muted { color: var(--muted); margin: 0 0 10px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .buttons button { font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text); }
+  .buttons button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  #option-note { margin: 4px 0 6px; }
+  #option-facts { margin: 0 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  summary { cursor: pointer; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: var(--swatch); vertical-align: -1px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view" aria-label="3D view of the powertrain bay with each surveyed engine or motor"></div>
+<div id="panel">
+  <h1>Powertrain bay survey</h1>
+  <p class="muted">Write-up in docs/studies/powertrain-bay.md. Each button puts one surveyed
+  powertrain in the proposed bay, with its fuel tank or battery. The kit stays neutral.</p>
+  <div id="options" class="buttons" role="group" aria-label="Powertrains"></div>
+  <p id="option-note"></p>
+  <table id="option-facts"></table>
+  <h2>Repair view</h2>
+  <div id="views" class="buttons" role="group" aria-label="Repair view"></div>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Shared parameters used</summary>
+    <table id="params"></table>
+  </details>
+  <p class="muted" style="margin-top:10px">Drag to orbit, right drag to pan, scroll to zoom.
+  Vehicle axes, X rearward, Y right, Z up, in millimeters.</p>
+</div>
+
+<!-- Copied from spec/vehicle-parameters.csv. tools/check.py warns when these drift from it. -->
+<script type="application/json" id="vehicle-parameters">
+{
+  "wheelbase": 3100,
+  "track_front": 1700,
+  "track_rear": 1700,
+  "tire_static_radius": 358.14,
+  "ground_clearance_min": 200,
+  "rail_height": 152.4,
+  "rail_width": 76.2,
+  "rail_y": 450,
+  "rail_z": 400,
+  "rail_front_x": -750,
+  "powertrain_bay_x_front": -350,
+  "powertrain_bay_length": 1000,
+  "powertrain_bay_width": 920,
+  "powertrain_bay_z_bottom": 280,
+  "powertrain_bay_height": 940,
+  "powertrain_tunnel_length": 900,
+  "powertrain_tunnel_width": 500,
+  "powertrain_tunnel_z_bottom": 280,
+  "powertrain_tunnel_height": 500,
+  "powertrain_rail_inner_gap_min": 812,
+  "powertrain_bay_mass_max": 380,
+  "powertrain_energy_mass_max": 570,
+  "powertrain_mass_max": 710
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const P = JSON.parse(document.getElementById("vehicle-parameters").textContent);
+
+// Vehicle axes (X rearward, Y right, Z up, in mm) to three.js axes (Y up).
+const v = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// Colors for each kind of thing. Keep them the same in every mockup.
+const COLORS = {
+  frame: 0x4b6584,
+  powertrain: 0xe67e22,
+  suspension: 0x16a085,
+  body: 0x95a5a6,
+  wheel: 0x2d3436,
+  envelope: 0x8e44ad,
+};
+const material = (key, opacity = 1) => new THREE.MeshStandardMaterial({
+  color: COLORS[key], roughness: 0.7, metalness: key === "frame" ? 0.4 : 0.1,
+  transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+});
+
+// A box between two opposite corners, given in vehicle coordinates.
+function box(from, to, key, opacity) {
+  const a = v(...from), b = v(...to);
+  const size = new THREE.Vector3(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(key, opacity));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  return mesh;
+}
+// An outlined, see-through box for an envelope or space claim.
+function envelope(from, to, opacity = 0.12) {
+  const mesh = box(from, to, "envelope", opacity);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry),
+    new THREE.LineBasicMaterial({ color: COLORS.envelope }));
+  mesh.add(edges);
+  return mesh;
+}
+// A cylinder between two points on a line parallel to vehicle X.
+function cylinderX(x0, x1, y, z, radius, key, opacity) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, Math.abs(x1 - x0), 32), material(key, opacity));
+  mesh.rotation.z = Math.PI / 2;
+  mesh.position.copy(v((x0 + x1) / 2, y, z));
+  return mesh;
+}
+
+// A wheel centered at vehicle (x, y, z), with its axle along vehicle Y.
+function wheel(x, y, z, radius, width) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 48), material("wheel"));
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// ---- Study-only values (not shared). Each is explained in the write-up. ----
+// Rear end of the rails, as in the template. The frame concept (issue 6) sets the real one.
+const RAIL_REAR_X = P.wheelbase + 1300;
+// Assumed cab, only to show that the powertrain lifts out without moving it.
+const CAB = { length: 1500, halfWidth: 850, zBottom: 700, zTop: 1900 };
+// How high the shop crane lifts a unit to clear the rails and fenders.
+const LIFT = 1100;
+const BAY_REAR_X = P.powertrain_bay_x_front + P.powertrain_bay_length;
+const FLOOR = P.powertrain_bay_z_bottom;
+// Engines start 150 mm behind the bay front, the service room in docs/calcs/powertrain-bay.md.
+const FRONT = P.powertrain_bay_x_front + 150;
+// Crankshaft or motor shaft height. Sourced for the Cummins R2.8 only (212 mm above
+// the pan bottom). For the others this is illustrative, 230 mm above the bay floor.
+const SHAFT_Z = FLOOR + 230;
+const RAIL_IN = P.rail_y - P.rail_width / 2;
+const RAIL_TOP = P.rail_z + P.rail_height / 2;
+
+// An engine or motor in the bay, with mount pads from its sides to the rails.
+// The pads stand in for the adapter plates of the universal mount study.
+function bayUnit(group, lifted, L, W, H, mountFromRear, bottom = FLOOR) {
+  lifted.add(box([FRONT, -W / 2, bottom], [FRONT + L, W / 2, bottom + H], "powertrain"));
+  const mx = FRONT + L - mountFromRear;
+  for (const s of [1, -1]) {
+    const inner = Math.min(W / 2, RAIL_IN - 10);
+    group.add(box([mx - 60, s * inner, RAIL_TOP], [mx + 60, s * RAIL_IN, RAIL_TOP + 90], "frame"));
+  }
+  return FRONT + L;
+}
+// A transmission behind the unit, centered on the shaft, and the propeller shaft to the rear axle.
+function gearbox(group, x0, len, w, h, z = SHAFT_Z) {
+  const bottom = Math.max(FLOOR, z - h / 2);
+  group.add(box([x0, -w / 2, bottom], [x0 + len, w / 2, bottom + h], "powertrain", 0.85));
+  group.add(cylinderX(x0 + len, P.wheelbase, 0, (z + P.tire_static_radius) / 2, 40, "powertrain", 0.6));
+}
+// 25 US gal OER FT5009A tank, 1232 x 419 x 359 mm, outside the left rail ahead of the rear axle.
+function fuelTank(group) {
+  const y0 = -(P.rail_y + P.rail_width / 2 + 10);
+  group.add(box([1450, y0 - 419, 300], [1450 + 1232, y0, 300 + 359], "powertrain", 0.7));
+}
+// EV West box for four Tesla Model S modules, 822 x 314 x 330 mm.
+function batteryBox(group, x0, y0, z0, across = false) {
+  const [lx, ly] = across ? [314, 822] : [822, 314];
+  group.add(box([x0, y0, z0], [x0 + lx, y0 + ly, z0 + 330], "powertrain", 0.7));
+}
+// Four boxes (16 modules, 84.8 kWh) filling the empty bay, two across and two high.
+function bayBatteries(group) {
+  for (const y0 of [-320, 6]) for (const z0 of [FLOOR + 20, FLOOR + 360]) batteryBox(group, FRONT - 120, y0, z0);
+}
+
+const OPTIONS = [
+  {
+    name: "GM 5.3 V8",
+    note: "GM 5.3 LM7 small block with a 4L60E automatic. The tallest and longest engine surveyed. Only the engine lifts out, after the bellhousing bolts are out and the transmission rests on its crossmember. Hood and radiator come off first.",
+    facts: [["Engine size, L x W x H", "762 x 610 x 864 mm"], ["Engine mass", "200 to 209 kg"],
+      ["Mount pattern", "4-3/8 x 3-1/8 in (LS)"], ["Gearbox", "4L60E, 791 mm long, 73 kg"],
+      ["Fuel", "25 gal tank, 1232 x 419 x 359 mm"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      const rear = bayUnit(g, lifted, 762, 610, 864, 500);
+      gearbox(g, rear, 791, 420, 420);
+      fuelTank(g);
+    },
+  },
+  {
+    name: "Ford 5.0 Coyote",
+    note: "Ford 5.0 Coyote V8 with a 10R80 automatic. The widest engine surveyed and the heaviest engine with its gearbox, so it sets the bay width and powertrain_bay_mass_max. The 10R80 length is not sourced and is drawn at the tunnel length.",
+    facts: [["Engine size, L x W x H", "724 x 762 x 686 mm"], ["Engine mass", "205 kg bare, 261 to 272 kg"],
+      ["Mount pattern", "M10 bolts, spacing TBD-verify"], ["Gearbox", "10R80, about 107 kg, length TBD-verify"],
+      ["Fuel", "25 gal tank, 1232 x 419 x 359 mm"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      const rear = bayUnit(g, lifted, 724, 762, 686, 480);
+      gearbox(g, rear, P.powertrain_tunnel_length, 440, 440);
+      fuelTank(g);
+    },
+  },
+  {
+    name: "Jeep 4.0 I6",
+    note: "Jeep 4.0 inline six with the Aisin AX15 five speed it was built with. Narrow and light, with room beside it to reach the plugs and the filter. Bought used or remanufactured.",
+    facts: [["Engine size, L x W x H", "699 x 610 x 724 mm"], ["Engine mass", "213 to 227 kg"],
+      ["Mount pattern", "TBD-verify"], ["Gearbox", "AX15, 610 mm with bellhousing, mass TBD-verify"],
+      ["Fuel", "25 gal tank, 1232 x 419 x 359 mm"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      const rear = bayUnit(g, lifted, 699, 610, 724, 460);
+      gearbox(g, rear, 610, 330, 330);
+      fuelTank(g);
+    },
+  },
+  {
+    name: "Cummins R2.8 diesel",
+    note: "Cummins R2.8 turbo diesel with an AX15 through an adapter bellhousing. The only engine with a published mount pattern and lift brackets. Its oil filter can be mounted off the engine where a mechanic reaches it from below.",
+    facts: [["Engine size, L x W x H", "639 x 656 x 718 mm"], ["Engine mass", "229 kg dry"],
+      ["Mount pattern", "M12 bolts, 104 x 65 mm, each side"], ["Gearbox", "AX15 by adapter, 610 mm"],
+      ["Fuel", "25 gal tank, 1232 x 419 x 359 mm"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      // Mount pattern center is 355 mm ahead of the flywheel housing face, which is 80 mm behind the block.
+      const rear = bayUnit(g, lifted, 639, 656, 718, 275);
+      gearbox(g, rear, 610, 330, 330, FLOOR + 212);
+      fuelTank(g);
+    },
+  },
+  {
+    name: "Chevrolet eCrate",
+    note: "Chevrolet Performance eCrate motor bolted to a GM 4L60E family automatic, driving the propeller shaft like an engine. The flat 66 kWh pack is drawn on top of the rails behind the cab, which would raise the bed floor.",
+    facts: [["Motor envelope", "544 x 478 x 445 mm"], ["Motor mass", "TBD-verify"],
+      ["Mount pattern", "To the 4L60E bellhousing, frame mounts TBD-verify"], ["Gearbox", "4L60E, 791 mm long, 73 kg"],
+      ["Battery", "66 kWh, 1807 x 1276 x 347 mm, 430 kg"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      const rear = bayUnit(g, lifted, 544, 478, 445, 200, SHAFT_Z - 222);
+      gearbox(g, rear, 791, 420, 420);
+      g.add(box([2200, -638, RAIL_TOP], [2200 + 1807, 638, RAIL_TOP + 347], "powertrain", 0.7));
+    },
+  },
+  {
+    name: "NetGain HyPer 9",
+    note: "NetGain HyPer 9 motor driving the propeller shaft directly, with no gearbox, so the rear axle ratio does all the reduction. Two battery boxes of Tesla modules stand across the front of the bay. Motor, controller and boxes each lift out from above.",
+    facts: [["Motor size", "220 mm diameter x 355 mm"], ["Motor mass", "59 kg, controller 4 kg"],
+      ["Mount pattern", "NEMA B face, or a 220 mm cradle"], ["Gearbox", "None, direct to the shaft"],
+      ["Battery", "6 Tesla modules, 31.8 kWh, 150 kg"]],
+    removal: [0, 0, LIFT], crane: true,
+    build(g, lifted) {
+      const x0 = BAY_REAR_X - 75 - 355;
+      lifted.add(cylinderX(x0, x0 + 355, 0, SHAFT_Z, 110, "powertrain"));
+      for (const s of [1, -1]) g.add(box([x0 + 60, s * 110, RAIL_TOP], [x0 + 180, s * RAIL_IN, RAIL_TOP + 90], "frame"));
+      g.add(cylinderX(x0 + 355, P.wheelbase, 0, (SHAFT_Z + P.tire_static_radius) / 2, 40, "powertrain", 0.6));
+      batteryBox(g, FRONT - 130, -411, FLOOR + 20, true);
+      batteryBox(g, FRONT - 130, -411, FLOOR + 360, true);
+    },
+  },
+  {
+    name: "Tesla large drive unit",
+    note: "Tesla Model S large drive unit at the rear axle, with its own reduction gear and two half shafts, so it needs independent rear suspension. At 864 mm it is wider than the gap between the proposed rails. It comes out below on a floor jack, not from above. The empty bay holds the battery boxes.",
+    facts: [["Unit size, L x W x H", "640 x 864 x 310 mm"], ["Unit mass", "134 kg with gearbox and inverter"],
+      ["Mount pattern", "None published, builder makes mounts"], ["Gearbox", "Built in, 9.73 to 1"],
+      ["Battery", "16 Tesla modules, 84.8 kWh, 398 kg of modules"]],
+    removal: [1600, 0, -150], crane: false,
+    build(g, lifted) {
+      const z = P.tire_static_radius;
+      lifted.add(box([P.wheelbase - 320, -432, z - 155], [P.wheelbase + 320, 432, z + 155], "powertrain"));
+      bayBatteries(g);
+    },
+  },
+  {
+    name: "Ford Eluminator",
+    note: "Ford Performance Eluminator, the Mustang Mach-E motor with a built in reduction gear and differential. It is a transverse unit with two half shafts, so like the Tesla unit it needs independent suspension. Drawn at the rear axle with the bay holding batteries.",
+    facts: [["Unit size, L x W x H", "570 x 345 x 370 mm"], ["Unit mass", "93 kg with gearbox"],
+      ["Mount pattern", "TBD-verify"], ["Gearbox", "Built in, 9.05 to 1"],
+      ["Battery", "Pack voltage TBD-verify, drawn as 16 modules"]],
+    removal: [1600, 0, -150], crane: false,
+    build(g, lifted) {
+      lifted.add(box([P.wheelbase - 172, -285, 235], [P.wheelbase + 173, 285, 235 + 370], "powertrain"));
+      bayBatteries(g);
+    },
+  },
+];
+
+// What every option shares, the wheels, rails, bay envelopes and the assumed cab.
+const shared = { cab: new THREE.Group(), envelopes: new THREE.Group() };
+function buildCommon(group) {
+  const r = P.tire_static_radius, w = 265;
+  for (const [x, track] of [[0, P.track_front], [P.wheelbase, P.track_rear]]) {
+    group.add(wheel(x, track / 2, r, r, w));
+    group.add(wheel(x, -track / 2, r, r, w));
+  }
+  for (const side of [1, -1]) {
+    const y = side * P.rail_y;
+    group.add(box(
+      [P.rail_front_x, y - P.rail_width / 2, P.rail_z - P.rail_height / 2],
+      [RAIL_REAR_X, y + P.rail_width / 2, P.rail_z + P.rail_height / 2], "frame"));
+  }
+  // Bay envelope and transmission tunnel, from the new shared values.
+  const bw = P.powertrain_bay_width / 2, z0 = P.powertrain_bay_z_bottom;
+  shared.envelopes.add(envelope(
+    [P.powertrain_bay_x_front, -bw, z0],
+    [BAY_REAR_X, bw, z0 + P.powertrain_bay_height]));
+  const tw = P.powertrain_tunnel_width / 2;
+  shared.envelopes.add(envelope(
+    [BAY_REAR_X, -tw, P.powertrain_tunnel_z_bottom],
+    [BAY_REAR_X + P.powertrain_tunnel_length, tw, P.powertrain_tunnel_z_bottom + P.powertrain_tunnel_height]));
+  group.add(shared.envelopes);
+  // Assumed cab outline, with a cut out for the tunnel.
+  const c = CAB;
+  shared.cab.add(box([BAY_REAR_X, -c.halfWidth, c.zBottom], [BAY_REAR_X + c.length, c.halfWidth, c.zTop], "body", 0.22));
+  group.add(shared.cab);
+}
+
+// Scene, camera and controls. Units are millimeters.
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(v(-3000, -4000, 6000));
+scene.add(sun);
+const grid = new THREE.GridHelper(12000, 24, 0x8894a6, 0xb8c0cc);
+grid.position.copy(v(P.wheelbase / 2, 0, 0));
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 100000);
+camera.position.copy(v(-3400, 3800, 2700));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(v(500, -700, 500));
+controls.addEventListener("change", render);
+
+const common = new THREE.Group();
+buildCommon(common);
+scene.add(common);
+let optionGroup = new THREE.Group();
+let liftGroup = new THREE.Group();
+scene.add(optionGroup);
+
+function render() { renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  render();
+}
+
+// Repair view toggles.
+const state = { lifted: false, cab: true, envelopes: true };
+// The removed unit moves along its option's removal path, scaled from 0 (fitted) to 1 (out).
+let lift = 0, liftTarget = 0, animating = false, removal = [0, 0, LIFT];
+function placeLifted() { liftGroup.position.copy(v(removal[0] * lift, removal[1] * lift, removal[2] * lift)); }
+function step() {
+  const d = liftTarget - lift;
+  lift = Math.abs(d) < 0.005 ? liftTarget : lift + d * 0.15;
+  placeLifted();
+  render();
+  if (lift !== liftTarget) requestAnimationFrame(step); else animating = false;
+}
+function setLift(on) {
+  liftTarget = on ? 1 : 0;
+  if (!animating) { animating = true; requestAnimationFrame(step); }
+}
+const VIEWS = [
+  { key: "lifted", label: "Remove engine or motor", apply: (on) => setLift(on) },
+  { key: "cab", label: "Show assumed cab", apply: (on) => { shared.cab.visible = on; render(); } },
+  { key: "envelopes", label: "Show bay envelope", apply: (on) => { shared.envelopes.visible = on; render(); } },
+];
+const views = document.getElementById("views");
+VIEWS.forEach((t) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = t.label;
+  b.setAttribute("aria-pressed", String(state[t.key]));
+  b.addEventListener("click", () => {
+    state[t.key] = !state[t.key];
+    b.setAttribute("aria-pressed", String(state[t.key]));
+    t.apply(state[t.key]);
+  });
+  views.appendChild(b);
+});
+
+// The panel. Buttons switch options, the tables show facts and shared values.
+const buttons = document.getElementById("options");
+function choose(index) {
+  scene.remove(optionGroup);
+  optionGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  optionGroup = new THREE.Group();
+  liftGroup = new THREE.Group();
+  optionGroup.add(liftGroup);
+  const option = OPTIONS[index];
+  option.build(optionGroup, liftGroup);
+  if (option.crane) addCrane(liftGroup);
+  removal = option.removal;
+  scene.add(optionGroup);
+  placeLifted();
+  [...buttons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === index)));
+  document.getElementById("option-note").textContent = option.note;
+  document.getElementById("option-facts").replaceChildren(...option.facts.map(([k, val]) => {
+    const tr = document.createElement("tr");
+    const a = document.createElement("td"), b = document.createElement("td");
+    a.textContent = k; b.textContent = val;
+    tr.append(a, b);
+    return tr;
+  }));
+  document.getElementById("legend").replaceChildren(...["frame", "powertrain", "wheel", "envelope", "body"].map((key) => {
+    const s = document.createElement("span");
+    s.textContent = { frame: "frame rails", powertrain: "powertrain, tank or battery", wheel: "wheels",
+      envelope: "bay envelope", body: "assumed cab" }[key];
+    s.style.setProperty("--swatch", "#" + COLORS[key].toString(16).padStart(6, "0"));
+    return s;
+  }));
+  render();
+}
+// A chain from above the lifted unit, standing in for the shop crane hook.
+function addCrane(lifted) {
+  const bb = new THREE.Box3().setFromObject(lifted);
+  if (bb.isEmpty()) return;
+  const c = bb.getCenter(new THREE.Vector3());
+  const chain = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 900, 8), material("frame"));
+  chain.position.set(c.x, bb.max.y + 450, c.z);
+  lifted.add(chain);
+}
+OPTIONS.forEach((option, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = option.name;
+  b.addEventListener("click", () => choose(i));
+  buttons.appendChild(b);
+});
+document.getElementById("params").replaceChildren(...Object.entries(P).map(([k, val]) => {
+  const tr = document.createElement("tr");
+  const a = document.createElement("td"), b = document.createElement("td");
+  a.textContent = k; b.textContent = val;
+  tr.append(a, b);
+  return tr;
+}));
+
+window.addEventListener("resize", resize);
+controls.update();
+choose(0);
+resize();
+</script>
+</body>
+</html>

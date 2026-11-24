@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a-truck packaging envelopes</title>
+<!--
+  SPDX-License-Identifier: CERN-OHL-W-2.0
+  Mockup for docs/studies/packaging.md (issue 5). Built from docs/studies/_template.html.
+  The space claims that get used are the SolidCraft scripts in cad/00-vehicle.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.94);
+    --text: #1d2330;
+    --muted: #5b6475;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d3d8e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: rgba(27, 32, 41, 0.94);
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --border: #2c3340;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: auto; box-sizing: border-box;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; margin: 10px 0 2px; }
+  .muted { color: var(--muted); margin: 0 0 10px; }
+  #options, #toggles { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  #options button, #toggles button { font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text); }
+  #options button[aria-pressed="true"], #toggles button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  #option-note { margin: 4px 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  summary { cursor: pointer; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: var(--swatch); vertical-align: -1px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view" aria-label="3D view of the packaging envelopes"></div>
+<div id="panel">
+  <h1>Packaging envelopes</h1>
+  <p class="muted">Space claims for issue 5. Write-up in docs/studies/packaging.md. Every block is a concept space claim, not a part.</p>
+  <div id="options" role="group" aria-label="Views"></div>
+  <p id="option-note"></p>
+  <h2>Show or hide</h2>
+  <div id="toggles" role="group" aria-label="Show or hide"></div>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Vehicle parameters (mm, deg)</summary>
+    <table id="params"></table>
+  </details>
+  <p class="muted" style="margin-top:10px">Drag to orbit, right drag to pan, scroll to zoom.
+  Vehicle axes, X rearward, Y right, Z up.</p>
+</div>
+
+<!-- Copied from spec/vehicle-parameters.csv. tools/check.py warns when these drift from it.
+     Rows that are expressions in the file are given here as their evaluated values. -->
+<script type="application/json" id="vehicle-parameters">
+{
+  "wheelbase": 3100,
+  "track_front": 1700,
+  "track_rear": 1700,
+  "tire_static_radius": 358.14,
+  "tire_overall_diameter": 802.64,
+  "tire_overall_width": 281.94,
+  "bed_floor_length": 1980,
+  "bed_width_wheelhouses": 1230,
+  "rail_height": 152.4,
+  "rail_width": 76.2,
+  "rail_y": 450,
+  "rail_z": 400,
+  "rail_front_x": -750,
+  "frame_rear_x": 4250,
+  "xmember_height": 101.6,
+  "xmember_bumper_x": -650,
+  "xmember_front_susp_x": 150,
+  "xmember_trans_x": 1300,
+  "xmember_cab_back_x": 2000,
+  "xmember_rear_susp_x": 2400,
+  "xmember_rear_x": 4150,
+  "powertrain_bay_x_front": -350,
+  "powertrain_bay_length": 1000,
+  "powertrain_bay_width": 920,
+  "powertrain_bay_z_bottom": 280,
+  "powertrain_bay_height": 940,
+  "powertrain_tunnel_length": 900,
+  "powertrain_tunnel_width": 500,
+  "powertrain_tunnel_z_bottom": 280,
+  "powertrain_tunnel_height": 500,
+  "pkg_firewall_x": 650,
+  "pkg_cab_back_x": 2000,
+  "pkg_cab_width": 1500,
+  "pkg_cab_floor_z": 551.2,
+  "pkg_cab_height": 1150,
+  "pkg_occupant_x_front": 750,
+  "pkg_occupant_length": 1150,
+  "pkg_occupant_width": 500,
+  "pkg_occupant_y": 400,
+  "pkg_occupant_height": 1050,
+  "pkg_bed_x_front": 2100,
+  "pkg_bed_width": 1600,
+  "pkg_bed_floor_z": 551.2,
+  "pkg_bed_depth": 500,
+  "pkg_bump_front": 100,
+  "pkg_bump_rear": 125,
+  "pkg_steer_lock": 35,
+  "pkg_hood_open_angle": 75,
+  "pkg_lift_height": 1240
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const P = JSON.parse(document.getElementById("vehicle-parameters").textContent);
+
+// Values only this mockup uses, the same as the local values in the cad/00-vehicle scripts.
+const HOOD_T = 100;          // AT-00-0007 hood_t
+const HOOD_OVERHANG = 200;   // AT-00-0007 hood_overhang
+const WHEELHOUSE_GAP = 50;   // AT-00-0003 wheelhouse_gap
+const STAND_PAD = 150;       // AT-00-0009 stand_pad
+const STAND_FRONT_X = P.xmember_front_susp_x + 300;  // AT-00-0009 stand_front_x
+const STAND_REAR_X = P.xmember_rear_susp_x - 300;    // AT-00-0009 stand_rear_x
+// Beam axle what if (docs/calcs/packaging.py). Not a design choice.
+const AXLE_TUBE_REAR = 76.2;  // 3 in tube, Moser 9B and M88 (donor parts study)
+const AXLE_TUBE_FRONT = 88.9; // 3.5 in tube, Spicer Ultimate Dana 60 (donor parts study)
+const BUMP_STOP_GAP = 25;     // Proposed gap between an axle tube at full bump and the rail
+
+// Vehicle axes (X rearward, Y right, Z up, in mm) to three.js axes (Y up).
+const v = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// Colors for each kind of thing. Keep them the same in every mockup.
+// "occupant" and "clash" are added for this study only.
+const COLORS = {
+  frame: 0x4b6584,
+  powertrain: 0xe67e22,
+  suspension: 0x16a085,
+  body: 0x95a5a6,
+  wheel: 0x2d3436,
+  envelope: 0x8e44ad,
+  occupant: 0xf1c40f,
+  clash: 0xe0245e,
+};
+const material = (key, opacity = 1) => new THREE.MeshStandardMaterial({
+  color: COLORS[key], roughness: 0.7, metalness: key === "frame" ? 0.4 : 0.1,
+  transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+});
+
+// A box between two opposite corners, given in vehicle coordinates.
+function box(from, to, key, opacity) {
+  const a = v(...from), b = v(...to);
+  const size = new THREE.Vector3(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(key, opacity));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  return mesh;
+}
+
+// A tire centered at vehicle (x, y, z), axle along vehicle Y, steered by `steer` degrees about vehicle Z.
+function tire(x, y, z, key, opacity, steer = 0) {
+  const r = P.tire_overall_diameter / 2;
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, P.tire_overall_width, 48), material(key, opacity));
+  mesh.rotation.x = Math.PI / 2;
+  const pivot = new THREE.Group();
+  pivot.position.copy(v(x, y, z));
+  pivot.rotation.y = THREE.MathUtils.degToRad(steer);
+  pivot.add(mesh);
+  return pivot;
+}
+
+// Overlap of two boxes given as [[min x, y, z], [max x, y, z]], or null.
+function overlap(a, b) {
+  const lo = [0, 1, 2].map((i) => Math.max(a[0][i], b[0][i]));
+  const hi = [0, 1, 2].map((i) => Math.min(a[1][i], b[1][i]));
+  return lo.every((l, i) => l < hi[i] - 0.01) ? [lo, hi] : null;
+}
+
+// The claims as boxes, all from the shared values.
+const railTop = P.rail_z + P.rail_height / 2;
+const railInner = P.rail_y - P.rail_width / 2;
+const bayTop = P.powertrain_bay_z_bottom + P.powertrain_bay_height;
+const B = {
+  cab: [[P.pkg_firewall_x, -P.pkg_cab_width / 2, P.pkg_cab_floor_z], [P.pkg_cab_back_x, P.pkg_cab_width / 2, P.pkg_cab_floor_z + P.pkg_cab_height]],
+  occRH: [[P.pkg_occupant_x_front, P.pkg_occupant_y - P.pkg_occupant_width / 2, P.pkg_cab_floor_z],
+          [P.pkg_occupant_x_front + P.pkg_occupant_length, P.pkg_occupant_y + P.pkg_occupant_width / 2, P.pkg_cab_floor_z + P.pkg_occupant_height]],
+  occLH: [[P.pkg_occupant_x_front, -P.pkg_occupant_y - P.pkg_occupant_width / 2, P.pkg_cab_floor_z],
+          [P.pkg_occupant_x_front + P.pkg_occupant_length, -P.pkg_occupant_y + P.pkg_occupant_width / 2, P.pkg_cab_floor_z + P.pkg_occupant_height]],
+  bayLow: [[P.powertrain_bay_x_front, -railInner, P.powertrain_bay_z_bottom], [P.pkg_firewall_x, railInner, railTop]],
+  bayHigh: [[P.powertrain_bay_x_front, -P.powertrain_bay_width / 2, railTop], [P.pkg_firewall_x, P.powertrain_bay_width / 2, bayTop]],
+  tunnel: [[P.pkg_firewall_x, -P.powertrain_tunnel_width / 2, P.powertrain_tunnel_z_bottom],
+           [P.pkg_firewall_x + P.powertrain_tunnel_length, P.powertrain_tunnel_width / 2, P.powertrain_tunnel_z_bottom + P.powertrain_tunnel_height]],
+  lift: [[P.powertrain_bay_x_front, -P.powertrain_bay_width / 2, bayTop], [P.pkg_firewall_x, P.powertrain_bay_width / 2, bayTop + P.pkg_lift_height]],
+  corridor: [[P.powertrain_bay_x_front, -railInner, 0], [P.pkg_firewall_x + P.powertrain_tunnel_length, railInner, P.powertrain_bay_z_bottom]],
+};
+const xmember = (x) => [[x - P.rail_width / 2, -railInner, P.rail_z - P.xmember_height / 2], [x + P.rail_width / 2, railInner, P.rail_z + P.xmember_height / 2]];
+const rail = (side) => [[P.rail_front_x, side * P.rail_y - P.rail_width / 2, P.rail_z - P.rail_height / 2],
+                        [P.frame_rear_x, side * P.rail_y + P.rail_width / 2, P.rail_z + P.rail_height / 2]];
+
+// What every view shares, the frame as drawn in the frame concept.
+function frame(group) {
+  for (const side of [1, -1]) group.add(box(...rail(side), "frame"));
+  for (const x of [P.xmember_bumper_x, P.xmember_front_susp_x, P.xmember_trans_x,
+                   P.xmember_cab_back_x, P.xmember_rear_susp_x, P.xmember_rear_x]) {
+    group.add(box(...xmember(x), "frame"));
+  }
+}
+
+// Hide the cab or bed so the service space and the wheels under them are visible.
+const hidden = { cab: false, bed: false };
+
+function cab(group) {
+  if (hidden.cab) return;
+  group.add(box(...B.cab, "body", 0.25));
+  group.add(box(...B.occRH, "occupant", 0.6));
+  group.add(box(...B.occLH, "occupant", 0.6));
+}
+
+function bed(group) {
+  if (hidden.bed) return;
+  const x0 = P.pkg_bed_x_front, x1 = x0 + P.bed_floor_length;
+  const z0 = P.pkg_bed_floor_z, z1 = z0 + P.pkg_bed_depth, w = P.pkg_bed_width / 2;
+  const wh0 = P.wheelbase - P.tire_overall_diameter / 2 - WHEELHOUSE_GAP;
+  const wh1 = P.wheelbase + P.tire_overall_diameter / 2 + WHEELHOUSE_GAP;
+  const whTop = P.tire_static_radius + P.tire_overall_diameter / 2 + P.pkg_bump_rear + WHEELHOUSE_GAP;
+  group.add(box([x0, -w, z0], [wh0, w, z1], "body", 0.25));
+  group.add(box([wh1, -w, z0], [x1, w, z1], "body", 0.25));
+  group.add(box([wh0, -P.bed_width_wheelhouses / 2, z0], [wh1, P.bed_width_wheelhouses / 2, z1], "body", 0.25));
+  group.add(box([wh0, -w, whTop], [wh1, w, z1], "body", 0.25));
+}
+
+function bay(group, opacity = 0.35) {
+  group.add(box(...B.bayLow, "powertrain", opacity));
+  group.add(box(...B.bayHigh, "powertrain", opacity));
+  group.add(box(...B.tunnel, "powertrain", opacity));
+}
+
+function wheels(group, sweep) {
+  const z = P.tire_static_radius;
+  for (const side of [1, -1]) {
+    const yf = side * P.track_front / 2, yr = side * P.track_rear / 2;
+    group.add(tire(0, yf, z, "wheel", 0.9));
+    group.add(tire(P.wheelbase, yr, z, "wheel", 0.9));
+    if (!sweep) continue;
+    group.add(tire(0, yf, z + P.pkg_bump_front, "wheel", 0.25));
+    group.add(tire(P.wheelbase, yr, z + P.pkg_bump_rear, "wheel", 0.25));
+    for (const s of [1, -1]) {
+      group.add(tire(0, yf, z, "wheel", 0.25, s * P.pkg_steer_lock));
+      group.add(tire(0, yf, z + P.pkg_bump_front, "wheel", 0.2, s * P.pkg_steer_lock));
+    }
+  }
+}
+
+// The hood claim, shown closed and at one third, two thirds and fully open about its hinge at the firewall.
+function hood(group) {
+  const len = P.pkg_firewall_x - P.powertrain_bay_x_front + HOOD_OVERHANG;
+  for (const f of [0, 1 / 3, 2 / 3, 1]) {
+    const pivot = new THREE.Group();
+    pivot.position.copy(v(P.pkg_firewall_x, 0, bayTop + HOOD_T));
+    // A positive turn about vehicle Y lifts the front edge. Vehicle Y is three.js -Z.
+    pivot.rotation.z = -THREE.MathUtils.degToRad(f * P.pkg_hood_open_angle);
+    const plate = box([-len, -P.pkg_cab_width / 2, -HOOD_T], [0, P.pkg_cab_width / 2, 0], "envelope", f === 1 ? 0.45 : 0.15);
+    pivot.add(plate);
+    group.add(pivot);
+  }
+}
+
+function service(group) {
+  group.add(box(...B.lift, "envelope", 0.18));
+  group.add(box(...B.corridor, "envelope", 0.3));
+  for (const side of [1, -1]) {
+    for (const x of [STAND_FRONT_X, STAND_REAR_X]) {
+      group.add(box([x - STAND_PAD / 2, side * P.rail_y - P.rail_width / 2, 0],
+                    [x + STAND_PAD / 2, side * P.rail_y + P.rail_width / 2, P.rail_z - P.rail_height / 2], "envelope", 0.6));
+    }
+  }
+  hood(group);
+}
+
+// A powertrain block lifted along the claimed path, to show the removal.
+function liftedPowertrain(group) {
+  const h = P.powertrain_bay_height - 75;
+  group.add(box([P.powertrain_bay_x_front + 150, -381, P.powertrain_bay_z_bottom], [P.pkg_firewall_x - 75, 381, P.powertrain_bay_z_bottom + h], "powertrain", 0.85));
+  group.add(box([P.powertrain_bay_x_front + 150, -381, bayTop + 10], [P.pkg_firewall_x - 75, 381, bayTop + 10 + h], "powertrain", 0.3));
+}
+
+function clashes(group, list) {
+  for (const [a, b] of list) {
+    const o = overlap(a, b);
+    if (o) group.add(box(...o, "clash", 0.85));
+  }
+}
+
+const FOUND_CLASHES = [
+  [B.tunnel, B.occRH], [B.tunnel, B.occLH],
+  [B.bayLow, xmember(P.xmember_front_susp_x)],
+  [B.tunnel, xmember(P.xmember_trans_x)],
+];
+
+// Beam axle what if. A tube at design height and at full bump through the straight rails.
+function beamAxles(group) {
+  const axles = [[P.wheelbase, AXLE_TUBE_REAR, P.pkg_bump_rear, P.track_rear], [0, AXLE_TUBE_FRONT, P.pkg_bump_front, P.track_front]];
+  const list = [];
+  for (const [x, d, bump, track] of axles) {
+    for (const [dz, op] of [[0, 0.95], [bump, 0.3]]) {
+      const z = P.tire_static_radius + dz;
+      const tube = [[x - d / 2, -track / 2 + P.tire_overall_width / 2, z - d / 2], [x + d / 2, track / 2 - P.tire_overall_width / 2, z + d / 2]];
+      group.add(box(...tube, "suspension", op));
+      for (const side of [1, -1]) list.push([tube, rail(side)]);
+    }
+    // The least rail height over this axle that clears the tube at full bump.
+    const zNeed = P.tire_static_radius + d / 2 + bump + BUMP_STOP_GAP + P.rail_height / 2;
+    for (const side of [1, -1]) {
+      group.add(box([x - 500, side * P.rail_y - P.rail_width / 2, zNeed - P.rail_height / 2],
+                    [x + 500, side * P.rail_y + P.rail_width / 2, zNeed + P.rail_height / 2], "frame", 0.3));
+    }
+  }
+  clashes(group, list);
+}
+
+const OPTIONS = [
+  {
+    name: "All claims",
+    note: "Every space claim in cad/00-vehicle on the frame concept. Cab interior and bed box in grey, occupants in yellow, the powertrain bay and tunnel in orange, wheels at design height, and the service space in purple.",
+    legend: ["frame", "body", "occupant", "powertrain", "wheel", "envelope"],
+    build: (g) => { cab(g); bed(g); bay(g); wheels(g, false); service(g); },
+  },
+  {
+    name: "Wheels at bump and lock",
+    note: `Each tire at design height (dark), at full bump (front ${P.pkg_bump_front} mm, rear ${P.pkg_bump_rear} mm) and the fronts at plus and minus ${P.pkg_steer_lock} deg of lock. At full lock the tire comes within 16 mm of the rail outer face and would touch it at about 38.9 deg. Hide the cab and bed to see it from above.`,
+    legend: ["frame", "wheel", "body"],
+    build: (g) => { cab(g); bed(g); wheels(g, true); },
+  },
+  {
+    name: "Service space",
+    note: "What a mechanic needs. The hood swing to its open angle, the path a shop crane lifts the powertrain along (hood and radiator off first, as the bay survey says), the corridor under the bay and tunnel for drains and filters on jack stands, and a clear stand point under each rail.",
+    legend: ["frame", "powertrain", "envelope", "wheel"],
+    build: (g) => { bay(g, 0.15); liftedPowertrain(g); service(g); wheels(g, false); },
+  },
+  {
+    name: "Clashes found",
+    note: "Red is where a claim and the frame or another claim overlap. The tunnel placeholder reaches 100 mm into each occupant. The front suspension crossmember crosses the powertrain bay below the rail tops. The transmission crossmember crosses the tunnel, 171 mm above its floor. The hood swing overlapping the lift path only means the hood comes off for a lift.",
+    legend: ["frame", "powertrain", "occupant", "clash"],
+    build: (g) => { cab(g); bay(g, 0.2); wheels(g, false); clashes(g, FOUND_CLASHES); },
+  },
+  {
+    name: "Beam axle what if",
+    note: "Not a choice. If a beam axle is chosen (open decisions 2 and 3), its tube (green, at design height and full bump) passes through the straight rails (red). The ghost rails show the least rail height over each axle, about 222 mm higher at the rear and 204 mm at the front. An independent suspension with pivots beside the rails avoids this.",
+    legend: ["frame", "suspension", "wheel", "clash"],
+    build: (g) => { wheels(g, false); beamAxles(g); },
+  },
+];
+
+// Scene, camera and controls. Units are millimeters.
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(v(-3000, -4000, 6000));
+scene.add(sun);
+const grid = new THREE.GridHelper(12000, 24, 0x8894a6, 0xb8c0cc);
+grid.position.copy(v(P.wheelbase / 2, 0, 0));
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 100000);
+camera.position.copy(v(-4200, 6400, 3800));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(v(1000, 0, 700));
+controls.addEventListener("change", render);
+
+const common = new THREE.Group();
+frame(common);
+scene.add(common);
+let optionGroup = new THREE.Group();
+scene.add(optionGroup);
+
+function render() { renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  render();
+}
+
+// The panel. Buttons switch views, the table shows the parameters used.
+const buttons = document.getElementById("options");
+let current = 0;
+function choose(index) {
+  current = index;
+  scene.remove(optionGroup);
+  optionGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  optionGroup = new THREE.Group();
+  OPTIONS[index].build(optionGroup);
+  scene.add(optionGroup);
+  [...buttons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === index)));
+  document.getElementById("option-note").textContent = OPTIONS[index].note;
+  document.getElementById("legend").replaceChildren(...OPTIONS[index].legend.map((key) => {
+    const s = document.createElement("span");
+    s.textContent = key;
+    s.style.setProperty("--swatch", "#" + COLORS[key].toString(16).padStart(6, "0"));
+    return s;
+  }));
+  render();
+}
+OPTIONS.forEach((option, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = option.name;
+  b.addEventListener("click", () => choose(i));
+  buttons.appendChild(b);
+});
+const toggles = document.getElementById("toggles");
+for (const [key, label] of [["cab", "Hide cab"], ["bed", "Hide bed"]]) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = label;
+  b.setAttribute("aria-pressed", "false");
+  b.addEventListener("click", () => {
+    hidden[key] = !hidden[key];
+    b.setAttribute("aria-pressed", String(hidden[key]));
+    choose(current);
+  });
+  toggles.appendChild(b);
+}
+document.getElementById("params").replaceChildren(...Object.entries(P).map(([k, val]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${k}</td><td>${val}</td>`;
+  return tr;
+}));
+
+window.addEventListener("resize", resize);
+controls.update();
+choose(0);
+resize();
+</script>
+</body>
+</html>

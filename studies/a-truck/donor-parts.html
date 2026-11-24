@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>a-truck donor parts survey</title>
+<!--
+  SPDX-License-Identifier: CERN-OHL-W-2.0
+  Mockup for docs/studies/donor-parts.md. Started from docs/studies/_template.html.
+  Follow .agents/skills/truck-mockups/SKILL.md.
+  Every shape here is schematic. Sizes that are not shared parameters are
+  drawn for illustration only and are not design values. The sourced
+  numbers are in docs/studies/donor-parts.md.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.94);
+    --text: #1d2330;
+    --muted: #5b6475;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d3d8e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: rgba(27, 32, 41, 0.94);
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --border: #2c3340;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: auto; box-sizing: border-box;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; margin: 10px 0 0; }
+  .muted { color: var(--muted); margin: 0 0 10px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .buttons button { font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer; text-align: left;
+    border: 1px solid var(--border); background: transparent; color: var(--text); }
+  .buttons button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  .note { margin: 4px 0 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  summary { cursor: pointer; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: var(--swatch); vertical-align: -1px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view" aria-label="3D view of the donor parts combinations"></div>
+<div id="panel">
+  <h1>Donor parts survey</h1>
+  <p class="muted">Axle and steering combinations from docs/studies/donor-parts.md, drawn against the
+  shared frame rails and wheels. Shapes are schematic.</p>
+  <h2>Combination</h2>
+  <div id="options" class="buttons" role="group" aria-label="Axle and steering combinations"></div>
+  <p id="option-note" class="note"></p>
+  <h2>Repair view</h2>
+  <div id="views" class="buttons" role="group" aria-label="Repair views"></div>
+  <p id="view-note" class="note"></p>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Vehicle parameters (mm)</summary>
+    <table id="params"></table>
+  </details>
+  <p class="muted" style="margin-top:10px">Drag to orbit, right drag to pan, scroll to zoom.
+  Vehicle axes, X rearward, Y right, Z up. The driver sits on the left (negative Y).</p>
+</div>
+
+<!-- Copied from spec/vehicle-parameters.csv. tools/check.py warns when these drift from it. -->
+<script type="application/json" id="vehicle-parameters">
+{
+  "wheelbase": 3100,
+  "track_front": 1700,
+  "track_rear": 1700,
+  "tire_static_radius": 358.14,
+  "rail_height": 152.4,
+  "rail_width": 76.2,
+  "rail_y": 450,
+  "rail_z": 400,
+  "rail_front_x": -750
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const P = JSON.parse(document.getElementById("vehicle-parameters").textContent);
+
+// Vehicle axes (X rearward, Y right, Z up, in mm) to three.js axes (Y up).
+const v = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// Colors for each kind of thing. Keep them the same in every mockup.
+const COLORS = {
+  frame: 0x4b6584,
+  powertrain: 0xe67e22,
+  suspension: 0x16a085,
+  body: 0x95a5a6,
+  wheel: 0x2d3436,
+  envelope: 0x8e44ad,
+};
+// What each color stands for in this study.
+const LEGEND = [
+  ["frame", "frame rails"],
+  ["powertrain", "axles and shafts"],
+  ["suspension", "springs, dampers, arms, steering"],
+  ["body", "hubs and brakes"],
+  ["wheel", "wheels"],
+  ["envelope", "axle bump space that meets the rails"],
+];
+const material = (key, opacity = 1) => new THREE.MeshStandardMaterial({
+  color: COLORS[key], roughness: 0.7, metalness: key === "frame" || key === "body" ? 0.4 : 0.1,
+  transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+});
+
+// A box between two opposite corners, given in vehicle coordinates.
+function box(from, to, key, opacity) {
+  const a = v(...from), b = v(...to);
+  const size = new THREE.Vector3(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(key, opacity));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  return mesh;
+}
+
+// A wheel centered at vehicle (x, y, z), with its axle along vehicle Y.
+function wheel(x, y, z, radius, width, key = "wheel", opacity = 1) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 48), material(key, opacity));
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// A round bar between two points in vehicle coordinates.
+function rod(from, to, radius, key) {
+  const a = v(...from), b = v(...to);
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, dir.length(), 20), material(key));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return mesh;
+}
+
+function ball(at, radius, key) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 16), material(key));
+  mesh.position.copy(v(...at));
+  return mesh;
+}
+
+// A coil spring between two points, drawn as a helix of round wire.
+class Helix extends THREE.Curve {
+  constructor(radius, length, turns) { super(); this.r = radius; this.l = length; this.n = turns; }
+  getPoint(t, target = new THREE.Vector3()) {
+    const a = t * this.n * Math.PI * 2;
+    return target.set(this.r * Math.cos(a), t * this.l - this.l / 2, this.r * Math.sin(a));
+  }
+}
+function coil(from, to, radius, turns, key) {
+  const a = v(...from), b = v(...to);
+  const dir = new THREE.Vector3().subVectors(b, a);
+  const mesh = new THREE.Mesh(new THREE.TubeGeometry(new Helix(radius, dir.length(), turns), 160, 7, 8), material(key));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return mesh;
+}
+
+// A leaf spring pack from eye to eye, sagging to its center seat.
+function leaf(group, xFront, xRear, y, zEye, zSeat, width, thick) {
+  const curve = new THREE.QuadraticBezierCurve3(
+    v(xFront, y, zEye), v((xFront + xRear) / 2, y, 2 * zSeat - zEye), v(xRear, y, zEye));
+  const n = 16;
+  for (let i = 0; i < n; i++) {
+    const p0 = curve.getPoint(i / n), p1 = curve.getPoint((i + 1) / n);
+    const len = p0.distanceTo(p1);
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(len * 1.02, thick, width), material("suspension"));
+    seg.position.copy(p0).add(p1).multiplyScalar(0.5);
+    seg.rotation.z = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+    group.add(seg);
+  }
+  for (const x of [xFront, xRear]) group.add(wheel(x, y, zEye, 22, width + 10, "suspension"));
+}
+
+// Schematic sizes used only by this mockup. Drawn for illustration, not design values.
+const R = P.tire_static_radius;
+const TIRE_W = 265;            // 265/70R17 section width.
+const WHEEL_Y = P.track_front / 2;
+const TUBE_R = 40;             // Axle tube radius, schematic.
+const ROTOR_R = 165;           // Brake rotor radius, schematic (fits inside a 17 in wheel).
+const BUMP = 100;              // Proposed. Axle bump travel, only to show the space it needs.
+const RAIL_REAR_X = P.wheelbase + 1300; // Assumed, as in the template. The frame concept sets the real length.
+const RAIL_BOTTOM = P.rail_z - P.rail_height / 2;
+
+// The frame rails and wheels every combination shares.
+const wheels = {};
+function buildCommon(group) {
+  for (const side of [1, -1]) {
+    const y = side * P.rail_y;
+    group.add(box(
+      [P.rail_front_x, y - P.rail_width / 2, RAIL_BOTTOM],
+      [RAIL_REAR_X, y + P.rail_width / 2, P.rail_z + P.rail_height / 2], "frame"));
+  }
+  for (const [key, x, y] of [["fl", 0, -P.track_front / 2], ["fr", 0, P.track_front / 2],
+    ["rl", P.wheelbase, -P.track_rear / 2], ["rr", P.wheelbase, P.track_rear / 2]]) {
+    wheels[key] = wheel(x, y, R, R, TIRE_W, "wheel", 0.55);
+    group.add(wheels[key]);
+  }
+}
+
+// One wheel end (hub, rotor and caliper) at axle station x on side s (-1 left, 1 right).
+function wheelEnd(x, s) {
+  const g = new THREE.Group();
+  g.add(wheel(x, s * (WHEEL_Y - 30), R, 75, 70, "body"));               // hub
+  g.add(wheel(x, s * (WHEEL_Y - 60), R, ROTOR_R, 28, "body"));          // rotor
+  g.add(box([x + 90, s * (WHEEL_Y - 95), R - 70], [x + 175, s * (WHEEL_Y - 25), R + 70], "body")); // caliper
+  return g;
+}
+
+// Front ends. Each returns the movable groups the repair views use.
+function solidFront(g, diffY) {
+  const parts = { frontHub: wheelEnd(0, -1), steeringGear: new THREE.Group() };
+  g.add(rod([0, -(WHEEL_Y - 90), R], [0, WHEEL_Y - 90, R], TUBE_R, "powertrain"));
+  g.add(ball([0, diffY, R], 130, "powertrain"));
+  for (const s of [1, -1]) {
+    g.add(box([-50, s * (WHEEL_Y - 140), R - 110], [50, s * (WHEEL_Y - 90), R + 110], "suspension")); // knuckle
+    if (s === 1) g.add(wheelEnd(0, 1));
+    // Leaf spring under the rail, and a damper to the frame.
+    leaf(g, -650, 650, s * P.rail_y, R + 10, R - TUBE_R - 18, 63.5, 36);
+    g.add(rod([-110, s * 600, R], [-170, s * 540, 720], 22, "suspension"));
+    // Bump space the axle sweeps where it passes under the rail.
+    g.add(box([-70, s * P.rail_y - 80, R - TUBE_R], [70, s * P.rail_y + 80, R + TUBE_R + BUMP], "envelope", 0.35));
+  }
+  g.add(parts.frontHub);
+  return parts;
+}
+
+function independentFront(g) {
+  const parts = { frontHub: wheelEnd(0, -1), steeringGear: new THREE.Group() };
+  for (const s of [1, -1]) {
+    // Lower and upper control arms, two links each, to the ball joints.
+    for (const dx of [-180, 180]) g.add(rod([dx, s * 420, 280], [0, s * 770, 250], 16, "suspension"));
+    for (const dx of [-130, 130]) g.add(rod([dx, s * 500, 570], [0, s * 745, 560], 14, "suspension"));
+    g.add(ball([0, s * 770, 250], 24, "suspension"));
+    g.add(ball([0, s * 745, 560], 22, "suspension"));
+    g.add(box([-45, s * 755, 240], [45, s * 800, 575], "suspension")); // knuckle
+    g.add(rod([0, s * 790, 330], [-150, s * 770, 330], 12, "suspension")); // steering arm
+    // Coil spring over damper, from the lower arm to a tower above the rail.
+    g.add(coil([0, s * 630, 285], [0, s * 560, 760], 55, 7, "suspension"));
+    g.add(rod([0, s * 630, 285], [0, s * 560, 760], 20, "suspension"));
+    if (s === 1) g.add(wheelEnd(0, 1));
+  }
+  g.add(parts.frontHub);
+  return parts;
+}
+
+// Steering. Box on the left rail ahead of the axle, or a rack on the front crossmember.
+function steeringBox(g, parts) {
+  const gear = parts.steeringGear;
+  gear.add(box([-270, -(P.rail_y + P.rail_width / 2 + 115), 360], [-110, -(P.rail_y + P.rail_width / 2 + 5), 490], "suspension"));
+  gear.add(rod([-190, -540, 490], [-190, -540, 640], 12, "suspension"));  // input shaft
+  gear.add(rod([-190, -600, 360], [-190, -600, 250], 14, "suspension"));  // pitman arm
+  g.add(gear);
+  g.add(rod([-190, -600, 250], [-150, 770, 330], 14, "suspension"));     // drag link to the right knuckle
+  g.add(rod([150, -760, 320], [150, 760, 320], 16, "suspension"));       // tie rod behind the axle
+  for (const s of [1, -1]) g.add(rod([0, s * (WHEEL_Y - 115), 320], [150, s * 760, 320], 12, "suspension"));
+  g.add(rod([0, WHEEL_Y - 115, 340], [-150, 770, 330], 12, "suspension"));
+}
+
+function steeringRack(g, parts) {
+  const gear = parts.steeringGear;
+  gear.add(rod([-150, -360, 300], [-150, 360, 300], 28, "suspension"));
+  gear.add(ball([-150, -250, 300], 50, "suspension"));                     // pinion and valve housing
+  gear.add(rod([-150, -250, 300], [-170, -330, 520], 12, "suspension"));  // input shaft
+  g.add(gear);
+  for (const s of [1, -1]) g.add(rod([-150, s * 360, 300], [-150, s * 770, 330], 12, "suspension")); // tie rods
+}
+
+// Rear axles. kind is "ford9" (drop out third member), "m88" (Ford 8.8 pattern, rear cover)
+// or "d60" (Dana 60, rear cover, larger center).
+function rearAxle(g, kind) {
+  const x = P.wheelbase;
+  const parts = { rearShaft: new THREE.Group(), rearGears: new THREE.Group() };
+  g.add(rod([x, -(WHEEL_Y - 90), R], [x, WHEEL_Y - 90, R], TUBE_R, "powertrain"));
+  g.add(ball([x, 0, R], kind === "d60" ? 165 : 145, "powertrain"));
+  if (kind === "ford9") {
+    // The third member comes out forward in one piece.
+    parts.rearGears.add(ball([x - 70, 0, R], 125, "powertrain"));
+    parts.rearGears.add(rod([x - 120, 0, R], [x - 330, 0, R], 60, "powertrain"));
+  } else {
+    g.add(rod([x - 100, 0, R], [x - 300, 0, R], 55, "powertrain"));     // pinion nose
+    parts.rearGears.add(wheel(x + 150, 0, R, 135, 18, "powertrain"));    // rear cover
+    parts.rearGears.children[0].rotation.set(0, 0, Math.PI / 2);
+  }
+  // Left axle shaft with its flange. It slides out along the axle.
+  parts.rearShaft.add(rod([x, -(WHEEL_Y - 40), R], [x, -60, R], 18, "powertrain"));
+  parts.rearShaft.add(wheel(x, -(WHEEL_Y - 35), R, 90, 14, "powertrain"));
+  for (const s of [1, -1]) {
+    leaf(g, x - 700, x + 700, s * P.rail_y, R + 10, R - TUBE_R - 18, 63.5, 40);
+    g.add(rod([x + 120, s * 620, R], [x + 200, s * 540, 760], 22, "suspension"));
+    g.add(box([x - 70, s * P.rail_y - 80, R - TUBE_R], [x + 70, s * P.rail_y + 80, R + TUBE_R + BUMP], "envelope", 0.35));
+  }
+  g.add(wheelEnd(x, 1));
+  parts.rearHub = wheelEnd(x, -1);
+  g.add(parts.rearHub, parts.rearShaft, parts.rearGears);
+  return parts;
+}
+
+// The combinations the write-up compares. Notes are filled from the study.
+function combo(front, steer, rear) {
+  return (g) => {
+    const p = front === "solid" ? solidFront(g, -200) : independentFront(g);
+    if (steer === "rack") steeringRack(g, p); else steeringBox(g, p);
+    return { ...p, ...rearAxle(g, rear), front, steer, rear };
+  };
+}
+const OPTIONS = [
+  {
+    name: "1. Dana 60 front, box, Dana 60 rear",
+    note: "Fits. Spicer Dana 60 axles at both ends, 8 x 6.5 in bolt pattern and 35 spline shafts. "
+      + "A recirculating ball box on the left rail works a drag link. The dearest set, from $5,025 "
+      + "for the front axle alone. Each solid axle needs a frame kick-up (purple).",
+    build: combo("solid", "box", "d60"),
+  },
+  {
+    name: "2. GM 1999-06 front, rack, Ford 9 rear",
+    note: "Fits. New replacement parts for the 1999 to 2006 Silverado 1500 rear wheel drive front end "
+      + "(knuckles, arms, unit hubs, hydraulic rack) on a-truck's own mounts, with a Moser Ford 9 rear. "
+      + "Both ends are 6 x 5.5 in (6 x 139.7 mm), so one spare fits all four corners.",
+    build: combo("ifs", "rack", "ford9"),
+  },
+  {
+    name: "3. GM 1999-06 front, rack, Ford 8.8 rear",
+    note: "Fits. The same GM front end with a Moser M88 (Ford 8.8 pattern) rear in 6 x 5.5 in. "
+      + "The gears are reached through a rear cover, and the shafts are held by bolt-in retainers or C-clips.",
+    build: combo("ifs", "rack", "m88"),
+  },
+  {
+    name: "4. Dana 60 front, box, Ford 9 rear",
+    note: "Does not fit. The Dana 60 front is 8 x 6.5 in, and the Moser Ford 9 has no 8 lug option, "
+      + "so the front and rear wheels would differ and no one spare would fit both. Shown so the mismatch is visible.",
+    build: combo("solid", "box", "ford9"),
+  },
+];
+
+// Repair views. Each moves parts out along their removal path, in vehicle mm.
+// The notes say what comes off first and which tools it takes.
+const VIEWS = [
+  {
+    name: "Assembled",
+    note: () => "Everything in place. Purple marks where a solid axle meets the straight rails from the shared values.",
+    moves: {},
+  },
+  {
+    name: "Front hub off",
+    note: (p) => p.front === "solid"
+      ? "On stands, wheel and caliper off, rotor off, then the spindle nut and the hub with its tapered bearings "
+        + "slide off the spindle. Bearings and seals are standard numbers. The socket the Dana 60 spindle nut takes is TBD-verify."
+      : "On stands, wheel and caliper off, rotor slides off, then three 15 mm bolts free the unit hub from the knuckle. "
+        + "It taps out with a hammer, no press. 133 ft-lb on refit.",
+    moves: { wheelFL: [0, -700, 0], frontHub: [0, -380, 0] },
+  },
+  {
+    name: "Steering gear off",
+    note: (p) => p.steer === "rack"
+      ? "Outer tie rod ends off the knuckles with a tie rod remover, lines and steering shaft off, then the rack's "
+        + "mounting bolts. It drops out below. Inner tie rods change with an inner tie rod tool. Both tools are parts store loaners."
+      : "Pitman arm off with a pitman arm puller (a parts store loaner), hoses and steering shaft off, then three "
+        + "bolts hold the box to the rail. It drops out below.",
+    moves: { steeringGear: [0, 0, -380] },
+  },
+  {
+    name: "Rear shaft out",
+    note: (p) => ({
+      ford9: "Wheel and caliper off, retainer plate nuts off, and the shaft slides out with its sealed bearing. "
+        + "Pressing a bearing on takes a 16 to 20 ton press, so the service part is a shaft with its bearing already on.",
+      m88: "Bolt-in retainers come out like the Ford 9. With C-clip shafts the clip inside the differential holds the shaft, "
+        + "so the rear cover comes off first, and the bearing stays in the housing for a slide hammer, with no press.",
+      d60: "Wheel and caliper off, then the shaft comes out. Whether the Spicer rear housing is semi or full floating, "
+        + "and so how the bearing is serviced, is TBD-verify.",
+    })[p.rear],
+    moves: { wheelRL: [0, -900, 0], rearHub: [0, -520, 0], rearShaft: [0, -680, 0] },
+  },
+  {
+    name: "Rear gears out",
+    note: (p) => p.rear === "ford9"
+      ? "Driveshaft off, the nuts round the housing face off, and the whole third member comes out forward. "
+        + "A ready set up spare goes straight in, so no gear setup is done under the truck."
+      : "Rear cover off, then the carrier comes out to the rear. Setting up new gears in place takes shims and a dial "
+        + "indicator, so it is a shop job rather than routine service.",
+    // The Ford 9 third member comes out forward, the others open at a rear cover.
+    moves: (p) => ({ rearGears: p.rear === "ford9" ? [-500, 0, 0] : [350, 0, 0] }),
+  },
+];
+
+// Scene, camera and controls. Units are millimeters.
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(v(-3000, -4000, 6000));
+scene.add(sun);
+const grid = new THREE.GridHelper(12000, 24, 0x8894a6, 0xb8c0cc);
+grid.position.copy(v(P.wheelbase / 2, 0, 0));
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 100000);
+camera.position.copy(v(-3400, -4600, 2400));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(v(P.wheelbase / 2, 0, 350));
+controls.addEventListener("change", render);
+
+const common = new THREE.Group();
+buildCommon(common);
+scene.add(common);
+let optionGroup = new THREE.Group();
+scene.add(optionGroup);
+let parts = {};
+let current = 0, currentView = 0;
+
+function render() { renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  // On wide screens, shift the picture right so the panel does not hide the truck.
+  const shift = w > 720 ? Math.min(200, w * 0.2) : 0;
+  camera.setViewOffset(w, h, -shift, 0, w, h);
+  camera.updateProjectionMatrix();
+  render();
+}
+
+// Move the parts the chosen repair view takes off, and put the rest back.
+const home = new Map();
+function applyView() {
+  const movable = { ...parts, wheelFL: wheels.fl, wheelRL: wheels.rl };
+  const chosen = VIEWS[currentView];
+  const moves = typeof chosen.moves === "function" ? chosen.moves(parts) : chosen.moves;
+  for (const [key, obj] of Object.entries(movable)) {
+    if (!(obj instanceof THREE.Object3D)) continue;
+    if (!home.has(obj)) home.set(obj, obj.position.clone());
+    const d = moves[key] || [0, 0, 0];
+    obj.position.copy(home.get(obj)).add(v(...d));
+  }
+  document.getElementById("view-note").textContent = VIEWS[currentView].note(parts);
+  [...views.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === currentView)));
+  render();
+}
+
+// The panel. Buttons switch combinations and repair views.
+const buttons = document.getElementById("options");
+const views = document.getElementById("views");
+function choose(index) {
+  scene.remove(optionGroup);
+  optionGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  for (const obj of [...home.keys()]) if (!common.children.includes(obj)) home.delete(obj);
+  optionGroup = new THREE.Group();
+  parts = OPTIONS[index].build(optionGroup);
+  scene.add(optionGroup);
+  current = index;
+  [...buttons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === index)));
+  document.getElementById("option-note").textContent = OPTIONS[index].note;
+  applyView();
+}
+OPTIONS.forEach((option, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = option.name;
+  b.addEventListener("click", () => choose(i));
+  buttons.appendChild(b);
+});
+VIEWS.forEach((item, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = item.name;
+  b.addEventListener("click", () => { currentView = i; applyView(); });
+  views.appendChild(b);
+});
+document.getElementById("legend").replaceChildren(...LEGEND.map(([key, label]) => {
+  const s = document.createElement("span");
+  s.textContent = label;
+  s.style.setProperty("--swatch", "#" + COLORS[key].toString(16).padStart(6, "0"));
+  return s;
+}));
+document.getElementById("params").replaceChildren(...Object.entries(P).map(([k, val]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${k}</td><td>${val}</td>`;
+  return tr;
+}));
+
+window.addEventListener("resize", resize);
+controls.update();
+choose(0);
+resize();
+</script>
+</body>
+</html>

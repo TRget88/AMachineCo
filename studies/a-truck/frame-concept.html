@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frame concept</title>
+<!--
+  SPDX-License-Identifier: CERN-OHL-W-2.0
+  Mockup for docs/studies/frame-concept.md. Started from docs/studies/_template.html.
+  Follow .agents/skills/truck-mockups/SKILL.md.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.94);
+    --text: #1d2330;
+    --muted: #5b6475;
+    --accent: #2563eb;
+    --accent-text: #ffffff;
+    --border: #d3d8e0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b;
+      --panel: rgba(27, 32, 41, 0.94);
+      --text: #e6e9ef;
+      --muted: #9aa3b2;
+      --accent: #60a5fa;
+      --accent-text: #0b1220;
+      --border: #2c3340;
+    }
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #view { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; width: min(360px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px); overflow: auto; box-sizing: border-box;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; margin: 10px 0 4px; }
+  .muted { color: var(--muted); margin: 0 0 10px; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .buttons button { font: inherit; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--text); }
+  .buttons button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+  #option-note, #repair-note { margin: 4px 0 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  td { padding: 2px 4px; border-bottom: 1px solid var(--border); }
+  td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  summary { cursor: pointer; margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0 0 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px;
+    border-radius: 2px; margin-right: 5px; background: var(--swatch); vertical-align: -1px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="view" aria-label="3D view of the frame concept options"></div>
+<div id="panel">
+  <h1>Frame concept</h1>
+  <p class="muted">Three ways to build the ladder frame. Write-up in docs/studies/frame-concept.md.</p>
+  <div id="options" class="buttons" role="group" aria-label="Construction options"></div>
+  <p id="option-note"></p>
+  <h2>Repair view</h2>
+  <div id="toggles" class="buttons" role="group" aria-label="Repair view"></div>
+  <p id="repair-note" class="muted"></p>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Vehicle parameters (mm)</summary>
+    <table id="params"></table>
+  </details>
+  <p class="muted" style="margin-top:10px">Drag to orbit, right drag to pan, scroll to zoom.
+  Vehicle axes, X rearward, Y right, Z up. Mount points are proposals, issue 19 sets the pads.</p>
+</div>
+
+<!-- Copied from spec/vehicle-parameters.csv. tools/check.py warns when these drift from it.
+     Rows that are expressions in the file are given here as their evaluated values. -->
+<script type="application/json" id="vehicle-parameters">
+{
+  "wheelbase": 3100,
+  "track_front": 1700,
+  "track_rear": 1700,
+  "tire_static_radius": 358.14,
+  "rail_height": 152.4,
+  "rail_width": 76.2,
+  "rail_wall": 4.8,
+  "rail_y": 450,
+  "rail_z": 400,
+  "rail_front_x": -750,
+  "frame_rear_x": 4250,
+  "xmember_height": 101.6,
+  "xmember_flange_t": 10,
+  "xmember_bumper_x": -650,
+  "xmember_front_susp_x": 150,
+  "xmember_trans_x": 1300,
+  "xmember_cab_back_x": 2000,
+  "xmember_rear_susp_x": 2400,
+  "xmember_rear_x": 4150,
+  "mount_cab_front_x": 700,
+  "mount_cab_rear_x": 2000,
+  "mount_cab_y": 450,
+  "mount_cab_z": 476.2,
+  "mount_bed_front_x": 2150,
+  "mount_bed_mid_x": 2950,
+  "mount_bed_rear_x": 3950,
+  "mount_bed_y": 450,
+  "mount_bed_z": 476.2,
+  "mount_pt_front_x": 450,
+  "mount_pt_front_y": 411.9,
+  "mount_pt_front_z": 400,
+  "mount_pt_rear_x": 1300,
+  "mount_pt_rear_y": 0,
+  "mount_pt_rear_z": 450.8,
+  "mount_susp_front_x": 0,
+  "mount_susp_front_pivot_x": 150,
+  "mount_susp_rear_fwd_x": 2400,
+  "mount_susp_rear_aft_x": 3800,
+  "mount_susp_y": 450,
+  "mount_susp_z": 323.8
+}
+</script>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const P = JSON.parse(document.getElementById("vehicle-parameters").textContent);
+
+// Vehicle axes (X rearward, Y right, Z up, in mm) to three.js axes (Y up).
+const v = (x, y, z) => new THREE.Vector3(x, z, -y);
+
+// Colors for each kind of thing. Keep them the same in every mockup.
+// "hardware" is added for this study, for bolt heads and weld beads.
+const COLORS = {
+  frame: 0x4b6584,
+  powertrain: 0xe67e22,
+  suspension: 0x16a085,
+  body: 0x95a5a6,
+  wheel: 0x2d3436,
+  envelope: 0x8e44ad,
+  hardware: 0xc9a227,
+};
+const material = (key, opacity = 1) => new THREE.MeshStandardMaterial({
+  color: COLORS[key], roughness: 0.7, metalness: key === "frame" ? 0.4 : 0.1,
+  transparent: opacity < 1, opacity, depthWrite: opacity >= 1,
+});
+
+// A box between two opposite corners, given in vehicle coordinates.
+function box(from, to, key, opacity) {
+  const a = v(...from), b = v(...to);
+  const size = new THREE.Vector3(Math.abs(b.x - a.x), Math.abs(b.y - a.y), Math.abs(b.z - a.z));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material(key, opacity));
+  mesh.position.copy(a).add(b).multiplyScalar(0.5);
+  return mesh;
+}
+
+// A wheel centered at vehicle (x, y, z), with its axle along vehicle Y.
+function wheel(x, y, z, radius, width) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, width, 48), material("wheel"));
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// A short cylinder along vehicle Y (a bolt head on a rail face), centered at (x, y, z).
+function boltHead(x, y, z) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(11, 11, 10, 6), material("hardware"));
+  mesh.rotation.x = Math.PI / 2;
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// A marker for a mount point.
+function marker(x, y, z, key) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(32, 20, 14), material(key));
+  mesh.position.copy(v(x, y, z));
+  return mesh;
+}
+
+// What every option shares, the wheels.
+function buildCommon(group) {
+  const r = P.tire_static_radius, w = 265;
+  for (const [x, track] of [[0, P.track_front], [P.wheelbase, P.track_rear]]) {
+    group.add(wheel(x, track / 2, r, r, w));
+    group.add(wheel(x, -track / 2, r, r, w));
+  }
+}
+
+const RAIL_IN = P.rail_y - P.rail_width / 2;   // inner face of each rail
+const RAIL_OUT = P.rail_y + P.rail_width / 2;  // outer face of each rail
+const ZT = P.rail_z + P.rail_height / 2, ZB = P.rail_z - P.rail_height / 2;
+const XMEMBERS = [
+  ["front bumper", P.xmember_bumper_x],
+  ["front suspension", P.xmember_front_susp_x],
+  ["transmission", P.xmember_trans_x],
+  ["cab back", P.xmember_cab_back_x],
+  ["rear suspension", P.xmember_rear_susp_x],
+  ["rear end", P.xmember_rear_x],
+];
+const DROP = 260; // How far a bolt-in crossmember drops in the removal view, mm (mockup only).
+
+// Rails as rectangular tube (options A and B).
+function tubeRails(group) {
+  for (const s of [1, -1]) {
+    group.add(box([P.rail_front_x, s * RAIL_IN, ZB], [P.frame_rear_x, s * RAIL_OUT, ZT], "frame"));
+  }
+}
+
+// Rails as formed channel (option C). Web outboard, flanges point in, so the
+// inside of every rail and every nut is open to view from the center of the truck.
+function channelRails(group) {
+  const t = P.rail_wall;
+  for (const s of [1, -1]) {
+    const web = [s * (RAIL_OUT - t), s * RAIL_OUT];
+    group.add(box([P.rail_front_x, Math.min(...web), ZB], [P.frame_rear_x, Math.max(...web), ZT], "frame"));
+    for (const [z0, z1] of [[ZT - t, ZT], [ZB, ZB + t]]) {
+      const fl = [s * RAIL_IN, s * (RAIL_OUT - t)];
+      group.add(box([P.rail_front_x, Math.min(...fl), z0], [P.frame_rear_x, Math.max(...fl), z1], "frame"));
+    }
+  }
+}
+
+// One crossmember. A bolt-in one has end plates with four bolts at each rail.
+// It goes into its own group so the removal view can drop it.
+function crossmember(x, boltIn, seat) {
+  const g = new THREE.Group();
+  const half = P.rail_width / 2, hz = P.xmember_height / 2, f = P.xmember_flange_t;
+  const inner = seat - (boltIn ? f : 0);
+  g.add(box([x - half, -inner, P.rail_z - hz], [x + half, inner, P.rail_z + hz], "frame"));
+  if (boltIn) {
+    for (const s of [1, -1]) {
+      const yp = [s * seat, s * (seat - f)];
+      g.add(box([x - 70, Math.min(...yp), P.rail_z - 66], [x + 70, Math.max(...yp), P.rail_z + 66], "frame"));
+      for (const dx of [-50, 50]) for (const dz of [-45, 45]) {
+        g.add(boltHead(x + dx, s * (seat - f - 5), P.rail_z + dz));
+      }
+    }
+  } else {
+    // Weld beads where the tube meets each rail.
+    for (const s of [1, -1]) {
+      const yp = [s * seat, s * (seat - 8)];
+      g.add(box([x - half - 5, Math.min(...yp), P.rail_z - hz - 5], [x + half + 5, Math.max(...yp), P.rail_z + hz + 5], "hardware"));
+    }
+  }
+  g.userData.boltIn = boltIn;
+  return g;
+}
+
+// Cab, bed and powertrain bay outlines. Sizes are assumed for this mockup only,
+// until the packaging study (phase 2) sets them.
+function bodies(group) {
+  group.add(box([P.mount_cab_front_x - 150, -950, ZT + 60], [P.xmember_cab_back_x + 40, 950, ZT + 1450], "body", 0.28));
+  group.add(box([P.xmember_cab_back_x + 90, -900, ZT + 120], [P.frame_rear_x - 150, 900, ZT + 620], "body", 0.28));
+}
+function bay(group) {
+  // Powertrain bay placeholder (issue 18 sets it). It lifts out upward.
+  group.add(box([-150, -330, ZB + 40], [P.xmember_trans_x - 60, 330, ZT + 420], "envelope", 0.3));
+}
+
+function mounts(group) {
+  for (const s of [1, -1]) {
+    for (const x of [P.mount_cab_front_x, P.mount_cab_rear_x]) group.add(marker(x, s * P.mount_cab_y, P.mount_cab_z, "body"));
+    for (const x of [P.mount_bed_front_x, P.mount_bed_mid_x, P.mount_bed_rear_x]) group.add(marker(x, s * P.mount_bed_y, P.mount_bed_z, "body"));
+    group.add(marker(P.mount_pt_front_x, s * P.mount_pt_front_y, P.mount_pt_front_z, "powertrain"));
+    for (const x of [P.mount_susp_front_x, P.mount_susp_front_pivot_x, P.mount_susp_rear_fwd_x, P.mount_susp_rear_aft_x]) {
+      group.add(marker(x, s * P.mount_susp_y, P.mount_susp_z, "suspension"));
+    }
+  }
+  group.add(marker(P.mount_pt_rear_x, P.mount_pt_rear_y, P.mount_pt_rear_z, "powertrain"));
+}
+
+const OPTIONS = [
+  {
+    name: "A. Welded tube",
+    note: "Rectangular tube rails with the crossmembers welded in. Only the transmission crossmember bolts in, so the powertrain can come out. A bent welded crossmember needs cutting and welding to replace.",
+    rails: tubeRails,
+    boltIn: (name) => name === "transmission",
+    seat: RAIL_IN,
+  },
+  {
+    name: "B. Bolted tube ladder",
+    note: "The same tube rails, with every crossmember on end plates and four through bolts per end (welded sleeves in the rail stop the tube crushing). Any crossmember unbolts and drops out with hand tools. This is what cad/10-frame models.",
+    rails: tubeRails,
+    boltIn: () => true,
+    seat: RAIL_IN,
+  },
+  {
+    name: "C. Formed channel",
+    note: "C-section rails bent from 4.8 mm plate, open toward the center, with bolt-in crossmembers on the web. Every surface and nut is in plain view, and a mount can be drilled anywhere. Much less stiff in torsion than a tube.",
+    rails: channelRails,
+    boltIn: () => true,
+    seat: RAIL_OUT - P.rail_wall,
+  },
+];
+
+const TOGGLES = [
+  { key: "bodies", label: "Cab and bed", on: true },
+  { key: "bay", label: "Powertrain bay", on: true },
+  { key: "mounts", label: "Mount points", on: true },
+  { key: "removal", label: "Drop bolt-in crossmembers", on: false },
+];
+const state = { option: 0 };
+for (const t of TOGGLES) state[t.key] = t.on;
+
+// Scene, camera and controls. Units are millimeters.
+const view = document.getElementById("view");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+view.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xffffff, 0x667788, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.copy(v(-3000, -4000, 6000));
+scene.add(sun);
+const grid = new THREE.GridHelper(12000, 24, 0x8894a6, 0xb8c0cc);
+grid.position.copy(v(P.wheelbase / 2, 0, 0));
+scene.add(grid);
+const camera = new THREE.PerspectiveCamera(40, 1, 10, 100000);
+camera.position.copy(v(-2600, -4600, 3000));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(v(P.wheelbase / 2, 0, 400));
+controls.addEventListener("change", render);
+
+const common = new THREE.Group();
+buildCommon(common);
+scene.add(common);
+let optionGroup = new THREE.Group();
+scene.add(optionGroup);
+
+function render() { renderer.render(scene, camera); }
+function resize() {
+  const w = view.clientWidth, h = view.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  render();
+}
+
+function build() {
+  scene.remove(optionGroup);
+  optionGroup.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); });
+  optionGroup = new THREE.Group();
+  const option = OPTIONS[state.option];
+  option.rails(optionGroup);
+  let dropped = 0;
+  for (const [name, x] of XMEMBERS) {
+    const boltIn = option.boltIn(name);
+    const g = crossmember(x, boltIn, option.seat);
+    if (state.removal && boltIn) { g.position.copy(v(0, 0, -DROP)); dropped++; }
+    optionGroup.add(g);
+  }
+  if (state.bodies) bodies(optionGroup);
+  if (state.bay) bay(optionGroup);
+  if (state.mounts) mounts(optionGroup);
+  scene.add(optionGroup);
+
+  [...optionButtons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(i === state.option)));
+  [...toggleButtons.children].forEach((b, i) => b.setAttribute("aria-pressed", String(state[TOGGLES[i].key])));
+  document.getElementById("option-note").textContent = option.note;
+  document.getElementById("repair-note").textContent = state.removal
+    ? `${dropped} of the 6 crossmembers bolt in and are shown dropped out. Support what hangs on each one first. The cab, bed and powertrain stay in place.`
+    : "The powertrain lifts out upward with a shop crane once the transmission crossmember is unbolted. The cab and bed sit on bolted mounts on the rail tops.";
+  const keys = ["frame", "hardware", "wheel"];
+  if (state.bodies || state.mounts) keys.push("body");
+  if (state.bay) keys.push("envelope");
+  if (state.mounts) keys.push("powertrain", "suspension");
+  const labels = { hardware: "bolts and welds", body: "cab, bed and their mounts", envelope: "powertrain bay (TBD)",
+    powertrain: "powertrain pads", suspension: "suspension mounts" };
+  document.getElementById("legend").replaceChildren(...keys.map((key) => {
+    const s = document.createElement("span");
+    s.textContent = labels[key] || key;
+    s.style.setProperty("--swatch", "#" + COLORS[key].toString(16).padStart(6, "0"));
+    return s;
+  }));
+  render();
+}
+
+// The panel. Buttons switch options and repair views, the table shows the parameters used.
+const optionButtons = document.getElementById("options");
+OPTIONS.forEach((option, i) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = option.name;
+  b.addEventListener("click", () => { state.option = i; build(); });
+  optionButtons.appendChild(b);
+});
+const toggleButtons = document.getElementById("toggles");
+TOGGLES.forEach((t) => {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = t.label;
+  b.addEventListener("click", () => { state[t.key] = !state[t.key]; build(); });
+  toggleButtons.appendChild(b);
+});
+document.getElementById("params").replaceChildren(...Object.entries(P).map(([k, val]) => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${k}</td><td>${val}</td>`;
+  return tr;
+}));
+
+window.addEventListener("resize", resize);
+controls.update();
+build();
+resize();
+</script>
+</body>
+</html>

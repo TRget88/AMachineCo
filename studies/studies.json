@@ -1,0 +1,59 @@
+{
+  "source": "https://nurbly.com",
+  "synced": "2026-11-24T15:12:04.159Z",
+  "projects": [
+    {
+      "slug": "a-car",
+      "repo": "adminkirk/a-car",
+      "ref": "main",
+      "studies": []
+    },
+    {
+      "slug": "a-truck",
+      "repo": "adminkirk/a-truck",
+      "ref": "main",
+      "studies": [
+        {
+          "slug": "donor-parts",
+          "mockup": "docs/studies/donor-parts.html",
+          "writeup": "docs/studies/donor-parts.md",
+          "title": "Donor and off the shelf parts survey",
+          "question": "Which widely sold axles, steering gears, brake kits, hubs and bearings, springs and dampers, and seat belts should a-truck be designed around, so that builders can buy them new and any mechanic can replace them and their wear parts for years?",
+          "page": "studies/a-truck/donor-parts.html"
+        },
+        {
+          "slug": "frame-concept",
+          "mockup": "docs/studies/frame-concept.html",
+          "writeup": "docs/studies/frame-concept.md",
+          "title": "Frame concept",
+          "question": "Which way of building the ladder frame lets an ordinary mechanic reach, remove and replace everything mounted to it, and repair the frame itself after damage, with mass, cost and build difficulty judged after that?",
+          "page": "studies/a-truck/frame-concept.html"
+        },
+        {
+          "slug": "packaging",
+          "mockup": "docs/studies/packaging.html",
+          "writeup": "docs/studies/packaging.md",
+          "title": "Packaging envelopes",
+          "question": "Where may each subsystem go, and what room must stay clear so a mechanic can open the hood, lift the powertrain out and reach the service points from below, on the frame concept as it stands?",
+          "page": "studies/a-truck/packaging.html"
+        },
+        {
+          "slug": "powertrain-bay",
+          "mockup": "docs/studies/powertrain-bay.html",
+          "writeup": "docs/studies/powertrain-bay.md",
+          "title": "Powertrain bay survey",
+          "question": "Which engines and electric motors are builders likely to fit, and what bay envelope and carried mass must the frame allow, so that each of them fits, is serviced in the truck and comes out with a shop crane?",
+          "page": "studies/a-truck/powertrain-bay.html"
+        },
+        {
+          "slug": "tire-wheel",
+          "mockup": "docs/studies/tire-wheel.html",
+          "writeup": "docs/studies/tire-wheel.md",
+          "title": "Tire and wheel",
+          "question": "Which 265/70R17 tire and which wheel should the kit use, so that the tire carries the truck at gross mass with margin and a flat tire or a bent wheel can be fixed at any tire shop?",
+          "page": "studies/a-truck/tire-wheel.html"
+        }
+      ]
+    }
+  ]
+}
